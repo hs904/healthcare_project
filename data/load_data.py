@@ -16,4 +16,4 @@ def load_data(file_path: str = "data/raw_data/raw_data.csv") -> pd.DataFrame:
         raise FileNotFoundError(
             f"The dataset was not found at {file_path}. Please place it in the specified directory."
         )
-    return pd.read_csv(file)
+        return pd.read_csv(file)
