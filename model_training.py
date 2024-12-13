@@ -1,13 +1,14 @@
+from data_preparation.feature_engineering import create_binary_features
+import pandas as pd
+import numpy as np
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.impute import SimpleImputer
 from sklearn.base import BaseEstimator, TransformerMixin
 from glum import GeneralizedLinearRegressor
 from lightgbm import LGBMClassifier
 from sklearn.model_selection import train_test_split, GridSearchCV
-from data_preparation.feature_engineering import create_binary_features
-import pandas as pd
-import numpy as np
 
 ### processing pipline
 # Load cleaned dataset
@@ -17,7 +18,8 @@ print(cleaned_data.head())
 # Feature Engineering 
 # numeric features will exlude binary features,
 # as we are going to normalize.
-numeric_features = ["age", "avg_glucose_level", "bmi", "hypertension", "heart_disease", "has_diabetes"]
+numeric_features = ["age", "avg_glucose_level", "bmi"]
+binary_features = ["hypertension", "heart_disease", "has_diabetes"]
 categorical_features = ['gender', 'ever_married', 'work_type', 'Residence_type', 'smoking_status']
 
 cleaned_data_data = create_binary_features(cleaned_data) 
@@ -25,10 +27,13 @@ print(cleaned_data.head())
 
 # Train-test split
 train, test = train_test_split(cleaned_data, test_size=0.2, random_state=42)
-X_train, y_train = train.drop(columns=["stroke"]), train["stroke"]
-X_test, y_test = test.drop(columns=["stroke"]), test["stroke"]
+X_train = train.drop(columns=["stroke"])
+y_train = train["stroke"]
+X_test = test.drop(columns=["stroke"])
+y_test = test["stroke"]
 
-# Custom LogTransformer 
+# Custom Transformers 
+# Zero or negative values in numeric features will cause NaN issue.
 class LogTransformer(BaseEstimator, TransformerMixin):
     def __init__(self, exclude_features=None):
         self.exclude_features = exclude_features if exclude_features else []
@@ -37,73 +42,68 @@ class LogTransformer(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):
-        if isinstance(X, pd.DataFrame):
+        if isinstance(X, pd.DataFrame):  # If input is a pandas DataFrame
             X = X.copy()
             for col in X.columns:
                 if col not in self.exclude_features:
                     # Replace zero or negative values with a small constant
                     X[col] = np.where(X[col] <= 0, 1e-5, X[col])
                     X[col] = np.log1p(X[col])
-        else:  # If X is a numpy array
+        else:  # If input is a NumPy array
+            X = X.copy()
             for i in range(X.shape[1]):
-                # Assume exclude_features is a list of indices if X is ndarray
-                if i not in self.exclude_features:
+                if i not in self.exclude_features:  # Handle by index
                     X[:, i] = np.where(X[:, i] <= 0, 1e-5, X[:, i])
                     X[:, i] = np.log1p(X[:, i])
         return X
 
 
+# Define pipelines for each feature group:
+# log transformation of numerical features (exclude binary features)
+numeric_transformer = Pipeline(steps=[
+    ("imputer", SimpleImputer(strategy="mean")),
+    ("log", LogTransformer(exclude_features=binary_features)),
+    ("scaler", StandardScaler())
+])
 
-# Preprocessing Pipeline
+# No transformation needed for binary features
+binary_transformer = "passthrough" 
+
+# Encoding categorical features
+categorical_transformer = Pipeline(steps=[
+    ("imputer", SimpleImputer(strategy="most_frequent")),
+    ("onehot", OneHotEncoder(drop="first", sparse_output=False))
+])
+
+# Combine all transformers in a ColumnTransformer
 preprocessor = ColumnTransformer(
     transformers=[
-        ("num", Pipeline([
-            ("scale", StandardScaler()),
-            ("log", LogTransformer(exclude_features=["hypertension", "heart_disease", "has_diabetes"]))
-        ]), numeric_features),
-        ("cat", OneHotEncoder(drop="first", sparse_output=False), categorical_features),
+        ("num", numeric_transformer, numeric_features),
+        ("bin", binary_transformer, binary_features),
+        ("cat", categorical_transformer, categorical_features),
     ]
 )
 
 
+# Modeling pipelines
 # GLM Pipeline
 glm_pipeline = Pipeline([
     ("preprocessor", preprocessor),
-    ("regressor", GeneralizedLinearRegressor(family="binomial", l1_ratio=1, fit_intercept=True)),
+    ("regressor", GeneralizedLinearRegressor(family="binomial", l1_ratio=1, fit_intercept=True))
 ])
 
 # LGBM Pipeline
 lgbm_pipeline = Pipeline([
     ("preprocessor", preprocessor),
-    ("classifier", LGBMClassifier(objective="binary", n_estimators=100, learning_rate=0.1)),
+    ("classifier", LGBMClassifier(objective="binary", n_estimators=100, learning_rate=0.1))
 ])
 
-# Before train and evaluate model...
-# Check for Missing Values
-# Zero or negative values in numeric features will cause NaN issue.
-print("Check for zero or negative values:")
-print(X_train[numeric_features].describe())
-print((X_train[numeric_features] <= 0).sum())
-
-
-# Train and evaluate GLM
+# Train GLM
 glm_pipeline.fit(X_train, y_train)
 print("GLM Train Score:", glm_pipeline.score(X_train, y_train))
 print("GLM Test Score:", glm_pipeline.score(X_test, y_test))
 
-# Train and evaluate LGBM
+# Train LGBM
 lgbm_pipeline.fit(X_train, y_train)
 print("LGBM Train Score:", lgbm_pipeline.score(X_train, y_train))
 print("LGBM Test Score:", lgbm_pipeline.score(X_test, y_test))
-
-# Hyperparameter Tuning for LGBM
-param_grid = {
-    "classifier__n_estimators": [50, 100, 150],
-    "classifier__learning_rate": [0.01, 0.1, 0.2],
-}
-grid_search = GridSearchCV(lgbm_pipeline, param_grid, cv=3, scoring="accuracy", verbose=1)
-grid_search.fit(X_train, y_train)
-
-print("Best Parameters:", grid_search.best_params_)
-print("LGBM Best Train Score:", grid_search.score(X_train, y_train))
-print("LGBM Best Test Score:", grid_search.score(X_test, y_test))
