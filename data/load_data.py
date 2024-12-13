@@ -18,7 +18,7 @@ def load_data(file_path: str = "data/raw_data/raw_data.csv") -> pd.DataFrame:
         )
     return pd.read_csv(file)
 
-def load_prepared_data(path='data/prepared_data.parquet'):
+ def load_prepared_data(path='data/prepared_data.parquet'):
     """
     Load the prepared dataset from a .parquet file.
     
