@@ -17,3 +17,15 @@ def load_data(file_path: str = "data/raw_data/raw_data.csv") -> pd.DataFrame:
             f"The dataset was not found at {file_path}. Please place it in the specified directory."
         )
     return pd.read_csv(file)
+
+def load_prepared_data(path='data/prepared_data.parquet'):
+    """
+    Load the prepared dataset from a .parquet file.
+    
+    Args:
+        path (str): Path to the prepared dataset file.
+        
+    Returns:
+        pd.DataFrame: The prepared dataset.
+    """
+    return pd.read_parquet(path)
