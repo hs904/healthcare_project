@@ -1,14 +1,16 @@
 from data_preparation.feature_engineering import create_binary_features
 import pandas as pd
 import numpy as np
+import lightgbm as lgb
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.impute import SimpleImputer
-from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
+from sklearn.metrics import roc_auc_score, make_scorer
 from glum import GeneralizedLinearRegressor
 from lightgbm import LGBMClassifier
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split, GridSearchCV, StratifiedKFold
 
 ### processing pipline
 # Load cleaned dataset
@@ -89,21 +91,88 @@ preprocessor = ColumnTransformer(
 # GLM Pipeline
 glm_pipeline = Pipeline([
     ("preprocessor", preprocessor),
-    ("regressor", GeneralizedLinearRegressor(family="binomial", l1_ratio=1, fit_intercept=True))
+    ("regressor", GeneralizedLinearRegressor(family="binomial", fit_intercept=True))
 ])
 
 # LGBM Pipeline
 lgbm_pipeline = Pipeline([
     ("preprocessor", preprocessor),
-    ("classifier", LGBMClassifier(objective="binary", n_estimators=100, learning_rate=0.1))
+    ("classifier", LGBMClassifier(objective="binary", n_estimators=100, learning_rate=0.1, class_weight="balanced"))
 ])
 
-# Train GLM
-glm_pipeline.fit(X_train, y_train)
-print("GLM Train Score:", glm_pipeline.score(X_train, y_train))
-print("GLM Test Score:", glm_pipeline.score(X_test, y_test))
+### Hyperparameter tuning
+# GLM parameter grid
+glm_param_grid = {
+    "regressor__alpha": [0.01, 0.1, 1.0, 10.0],
+    "regressor__l1_ratio": [0.0, 0.25, 0.5, 0.75, 1.0]
+}
 
-# Train LGBM
-lgbm_pipeline.fit(X_train, y_train)
-print("LGBM Train Score:", lgbm_pipeline.score(X_train, y_train))
-print("LGBM Test Score:", lgbm_pipeline.score(X_test, y_test))
+# LGBM parameter grid
+lgbm_param_grid = {
+    "classifier__learning_rate": [0.01, 0.05, 0.1],
+    "classifier__n_estimators": [1000],
+    "classifier__num_leaves": [15, 31, 63],
+    "classifier__min_child_weight": [0.001, 0.01, 0.1]
+}
+
+# Stratified k-fold cross-validation
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+# Custom AUC scorer for GLM
+def glm_auc_scorer(y_true, y_pred, **kwargs):
+    """Scorer function for AUC."""
+    return roc_auc_score(y_true, y_pred)
+
+glm_scorer = make_scorer(glm_auc_scorer)
+
+# GLM GridSearchCV
+glm_search = GridSearchCV(
+    estimator=glm_pipeline,
+    param_grid=glm_param_grid,
+    scoring=glm_scorer,
+    cv=cv,
+    n_jobs=-1,
+    verbose=2
+)
+
+# Custom Wrapper for LGBM with Early Stopping
+class LGBMClassifierWithEarlyStopping(lgb.LGBMClassifier):
+    """Wrapper for LightGBM to include early stopping during GridSearchCV."""
+    def fit(self, X, y, eval_set=None, early_stopping_rounds=10, **kwargs):
+        super().fit(
+            X, y,
+            eval_set=eval_set,
+            early_stopping_rounds=early_stopping_rounds,
+            eval_metric="auc",
+            **kwargs
+        )
+
+# Update the LGBM pipeline to use the wrapper
+lgbm_pipeline.named_steps['classifier'] = LGBMClassifierWithEarlyStopping()
+
+# LGBM GridSearchCV
+lgbm_search = GridSearchCV(
+    estimator=lgbm_pipeline,
+    param_grid=lgbm_param_grid,
+    scoring="roc_auc",
+    cv=cv,
+    n_jobs=-1,
+    verbose=2
+)
+
+# Fit GLM pipeline
+print("Tuning GLM pipeline...")
+glm_search.fit(X_train, y_train)
+print(f"Best GLM Parameters: {glm_search.best_params_}")
+print(f"Best GLM AUC: {glm_search.best_score_}")
+
+# Fit LGBM pipeline with early stopping
+print("Tuning LGBM pipeline...")
+lgbm_search.fit(
+    X_train, y_train,
+    classifier__eval_set=[(X_test, y_test)],
+    classifier__early_stopping_rounds=10
+)
+
+print(f"Best LGBM Parameters: {lgbm_search.best_params_}")
+print(f"Best LGBM AUC: {lgbm_search.best_score_}")
