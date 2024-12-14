@@ -1,2 +1,14 @@
+# Byte-compiled files
 __pycache__/
-*.pyc
+*.py[cod]
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Virtual environments
+.env/
+.venv/
+healthcare_project/
+
+# Data files
+data/*.parquet

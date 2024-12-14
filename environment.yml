@@ -1,0 +1,14 @@
+name: healthcare_project
+dependencies:
+  - python=3.12
+  - pandas
+  - numpy
+  - scikit-learn
+  - lightgbm
+  - seaborn
+  - matplotlib
+  - pyarrow
+  - glum
+  - pip
+  - pip:
+    - -e . 
