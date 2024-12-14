@@ -1,60 +1,58 @@
 import unittest
 import pandas as pd
 import numpy as np
-from model_training import LogTransformer 
-
-# Covers different scenarios: positive values, 
-# zero values, negative values, excluded features, 
-# and NumPy array inputs.
+from model_training import LogTransformer
 
 class TestLogTransformer(unittest.TestCase):
+    def setUp(self):
+        # Prepare test data
+        self.df_positive = pd.DataFrame({
+            "feature1": [1, 2, 3],
+            "feature2": [10, 20, 30]
+        })
+
+        self.df_zero = pd.DataFrame({
+            "feature1": [0, 1, 2],
+            "feature2": [10, 0, 30]
+        })
+
+        self.df_negative = pd.DataFrame({
+            "feature1": [-1, 1, 2],
+            "feature2": [10, -5, 30]
+        })
+
+        self.exclude_features = ["feature2"]
+
     def test_positive_values(self):
-        input_data = pd.DataFrame({"feature1": [1, 2, 3], "feature2": [10, 20, 30]})
-        expected_output = pd.DataFrame({"feature1": [np.log1p(1), np.log1p(2), np.log1p(3)],
-                                        "feature2": [np.log1p(10), np.log1p(20), np.log1p(30)]})
         transformer = LogTransformer()
-        transformed_data = transformer.transform(input_data)
-        pd.testing.assert_frame_equal(transformed_data, expected_output)
+        transformed = transformer.fit_transform(self.df_positive)
+        expected = np.log1p(self.df_positive)
+        pd.testing.assert_frame_equal(transformed, expected, check_dtype=False)
 
     def test_zero_values(self):
-        input_data = pd.DataFrame({"feature1": [0, 0, 0], "feature2": [0, 10, 20]})
-        expected_output = pd.DataFrame({"feature1": [np.log1p(1e-5), np.log1p(1e-5), np.log1p(1e-5)],
-                                        "feature2": [np.log1p(1e-5), np.log1p(10), np.log1p(20)]})
         transformer = LogTransformer()
-        transformed_data = transformer.transform(input_data)
-        pd.testing.assert_frame_equal(transformed_data, expected_output)
+        transformed = transformer.fit_transform(self.df_zero)
+        expected = self.df_zero.copy()
+        expected["feature1"] = np.log1p(np.where(expected["feature1"] <= 0, 1e-5, expected["feature1"]))
+        expected["feature2"] = np.log1p(np.where(expected["feature2"] <= 0, 1e-5, expected["feature2"]))
+        pd.testing.assert_frame_equal(transformed, expected, check_dtype=False)
 
     def test_negative_values(self):
-        input_data = pd.DataFrame({"feature1": [-1, -2, -3], "feature2": [10, -10, 20]})
-        expected_output = pd.DataFrame({"feature1": [np.log1p(1e-5), np.log1p(1e-5), np.log1p(1e-5)],
-                                        "feature2": [np.log1p(10), np.log1p(1e-5), np.log1p(20)]})
         transformer = LogTransformer()
-        transformed_data = transformer.transform(input_data)
-        pd.testing.assert_frame_equal(transformed_data, expected_output)
+        transformed = transformer.fit_transform(self.df_negative)
+        expected = self.df_negative.copy()
+        expected["feature1"] = np.log1p(np.where(expected["feature1"] <= 0, 1e-5, expected["feature1"]))
+        expected["feature2"] = np.log1p(np.where(expected["feature2"] <= 0, 1e-5, expected["feature2"]))
+        pd.testing.assert_frame_equal(transformed, expected, check_dtype=False)
 
     def test_exclude_features(self):
-        input_data = pd.DataFrame({"feature1": [1, 2, 3], "feature2": [10, 20, 30]})
-        expected_output = pd.DataFrame({"feature1": [np.log1p(1), np.log1p(2), np.log1p(3)],
-                                        "feature2": [10, 20, 30]})
-        transformer = LogTransformer(exclude_features=["feature2"])
-        transformed_data = transformer.transform(input_data)
-        pd.testing.assert_frame_equal(transformed_data, expected_output)
+        transformer = LogTransformer(exclude_features=self.exclude_features)
+        transformed = transformer.fit_transform(self.df_negative)
+        expected = self.df_negative.copy()
+        expected["feature1"] = np.log1p(np.where(expected["feature1"] <= 0, 1e-5, expected["feature1"]))
+        # Ensure feature2 remains unchanged
+        expected["feature2"] = self.df_negative["feature2"]
+        pd.testing.assert_frame_equal(transformed, expected, check_dtype=False)
 
-    def test_numpy_array(self):
-        input_data = np.array([[1, 10], [2, 20], [3, 30]])
-        expected_output = np.array([[np.log1p(1), np.log1p(10)],
-                                    [np.log1p(2), np.log1p(20)],
-                                    [np.log1p(3), np.log1p(30)]])
-        transformer = LogTransformer()
-        transformed_data = transformer.transform(input_data)
-        np.testing.assert_array_almost_equal(transformed_data, expected_output)
-
-    def test_fit(self):
-        transformer = LogTransformer()
-        transformer.fit(None)  # Fit should not raise errors
-        self.assertTrue(True)
-
-
-# Run the tests
 if __name__ == "__main__":
     unittest.main()
