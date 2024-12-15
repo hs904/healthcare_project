@@ -1,17 +1,24 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, RandomizedSearchCV
-from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.metrics import classification_report, roc_auc_score, classification_report, roc_curve, RocCurveDisplay
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.linear_model import LogisticRegression
+from sklearn.calibration import calibration_curve
 from imblearn.over_sampling import SMOTE
 import lightgbm as lgb
 import optuna
 import warnings
+import os
+import matplotlib.pyplot as plt
+import joblib
+from sklearn.metrics import roc_auc_score, classification_report
+from sklearn.inspection import PartialDependenceDisplay
+from dalex import Explainer
 
 # Suppress future warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -156,3 +163,149 @@ y_pred_lgbm_binary = (y_pred_lgbm > 0.5).astype(int)
 # Print evaluation metrics
 print("LightGBM Classification Report:\n", classification_report(y_test, y_pred_lgbm_binary))
 print("LightGBM ROC AUC Score:", roc_auc_score(y_test, y_pred_lgbm))
+
+
+#################################################################################################
+### Evaluation
+# Evaluate GLM
+print("Best GLM Parameters:", glm_grid_search.best_params_)
+y_pred_glm = best_glm_model.predict(X_test_preprocessed)
+glm_classification_report = classification_report(y_test, y_pred_glm)
+glm_roc_auc_score = roc_auc_score(y_test, y_pred_glm)
+print("GLM Classification Report:\n", glm_classification_report)
+print("GLM ROC AUC Score:", glm_roc_auc_score)
+
+with open("evaluation_plots/GLM_Repoert.txt", "w") as f:
+    f.write("GLM Classification Report:\n")
+    f.write(glm_classification_report + "\n")
+    f.write(f"GLM ROC AUC Score: {glm_roc_auc_score}\n")
+
+# Evaluate final LightGBM model
+y_pred_lgbm = final_model.predict(X_test_preprocessed, num_iteration=final_model.best_iteration)
+y_pred_lgbm_binary = (y_pred_lgbm > 0.5).astype(int)
+lgbm_classification_report = classification_report(y_test, y_pred_lgbm_binary)
+lgbm_roc_auc_score = roc_auc_score(y_test, y_pred_lgbm)
+print("LightGBM Classification Report:\n", lgbm_classification_report)
+print("LightGBM ROC AUC Score:", lgbm_roc_auc_score)
+
+with open("evaluation_plots/LightGBM_Report.txt", "w") as f:
+    f.write("LightGBM Classification Report:\n")
+    f.write(lgbm_classification_report + "\n")
+    f.write(f"LightGBM ROC AUC Score: {lgbm_roc_auc_score}\n")
+
+# Plot ROC Curve for GLM
+roc_display_glm = RocCurveDisplay.from_estimator(
+    best_glm_model, X_test_preprocessed, y_test, name="GLM (Logistic Regression)"
+)
+plt.title("ROC Curve - GLM")
+plt.savefig("evaluation_plots/roc_curve_glm.png")
+plt.close()
+
+# Plot ROC Curve for LightGBM
+fpr, tpr, _ = roc_curve(y_test, y_pred_lgbm)
+plt.figure()
+plt.plot(fpr, tpr, label="LightGBM (AUC = {:.2f})".format(lgbm_roc_auc_score))
+plt.plot([0, 1], [0, 1], "k--", label="Random Classifier")
+plt.title("ROC Curve - LightGBM")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.legend(loc="best")
+plt.savefig("evaluation_plots/roc_curve_lgbm.png")
+plt.close()
+
+# "Predicted vs. Actual" plot
+# The Calibration Curve (Reliability Curve) is the most 
+# appropriate and widely used method to visualize the 
+# relationship between predicted probabilities and actual 
+# outcomes for binary classification tasks. 
+
+# Calibration curve for GLM
+y_pred_glm_proba = best_glm_model.predict_proba(X_test_preprocessed)[:, 1]
+prob_true, prob_pred = calibration_curve(y_test, y_pred_glm_proba, n_bins=10)
+
+plt.figure(figsize=(8, 6))
+plt.plot(prob_pred, prob_true, marker="o", label="GLM", linestyle="--", color="blue")
+plt.plot([0, 1], [0, 1], "r--", label="Perfect Calibration", alpha=0.7)
+plt.title("Calibration Curve")
+plt.xlabel("Predicted Probability")
+plt.ylabel("Actual Fraction of Positives")
+plt.legend()
+plt.grid(alpha=0.3)
+plt.savefig("evaluation_plots/calibration_curve_glm.png")
+plt.show()
+
+# Calibration curve for LGBM
+y_pred_lgbm = final_model.predict(X_test_preprocessed, num_iteration=final_model.best_iteration)
+print("Min value in y_pred_lgbm:", y_pred_lgbm.min())
+print("Max value in y_pred_lgbm:", y_pred_lgbm.max())
+y_pred_lgbm = np.clip(y_pred_lgbm, 0, 1)
+prob_true_lgbm, prob_pred_lgbm = calibration_curve(y_test, y_pred_lgbm, n_bins=10)
+
+plt.figure(figsize=(8, 6))
+plt.plot(prob_pred_lgbm, prob_true_lgbm, marker="o", label="LGBM", linestyle="--", color="green")
+plt.plot([0, 1], [0, 1], "r--", label="Perfect Calibration", alpha=0.7)
+plt.title("Calibration Curve - LGBM")
+plt.xlabel("Predicted Probability")
+plt.ylabel("Actual Fraction of Positives")
+plt.legend()
+plt.grid(alpha=0.3)
+plt.savefig("evaluation_plots/calibration_curve_lgbm.png")
+plt.show()
+
+# Feature Improtance
+# Get Feature Importance for GLM
+# Get transformed feature names from the preprocessor
+glm_transformed_features = list(preprocessor.get_feature_names_out())
+glm_transformed_features.append("has_diabetes")
+
+# Get coefficients from the GLM model
+glm_coefficients = best_glm_model.named_steps['classifier'].coef_[0]
+
+# Ensure lengths match
+assert len(glm_transformed_features) == len(glm_coefficients), "Mismatch in features and coefficients!"
+
+# Create a DataFrame for GLM feature importance
+glm_feature_importance = pd.DataFrame({
+    "Feature": glm_transformed_features,
+    "Importance": glm_coefficients
+}).sort_values(by="Importance", ascending=False, key=abs)
+
+# Print the top 5 features for GLM
+glm_top_features = glm_feature_importance.head(5)
+print("Top 5 Features (GLM):\n", glm_top_features)
+
+# Get Feature Importance for LGBM
+# Create a DataFrame for the preprocessed test set with proper column names
+X_test_preprocessed_df = pd.DataFrame(X_test_preprocessed, columns=glm_transformed_features)
+
+# Clip predictions to the valid range [0, 1]
+y_pred_lgbm = np.clip(y_pred_lgbm, 0, 1)
+
+# Extract feature importance from LightGBM
+lgbm_feature_importance = pd.DataFrame({
+    "Feature": glm_transformed_features,  # Use GLM feature names for LGBM
+    "Importance": final_model.feature_importance(importance_type="gain")
+}).sort_values(by="Importance", ascending=False)
+
+# Print the top 5 features for LGBM
+lgbm_top_features = lgbm_feature_importance.head(5)
+print("Top 5 Features (LGBM):\n", lgbm_top_features)
+
+# Partial Dependence Plot
+# Generate Partial Dependence Plots for the top 5 LGBM features
+# Select top 5 features for LGBM
+top_features_lgbm = lgbm_top_features["Feature"].tolist()
+
+# Create Explainer for LGBM using the DataFrame with proper feature names
+explainer_lgbm = Explainer(final_model, X_test_preprocessed_df, y_test)
+
+# Generate Partial Dependence Plots and save them
+for feature in top_features_lgbm:
+    if feature in X_test_preprocessed_df.columns:
+        pd_profile_lgbm = explainer_lgbm.model_profile(variables=[feature])
+        pd_profile_lgbm.plot(title=f"Partial Dependence Plot - {feature} (LGBM)")
+        plt.ylabel("Predicted Probability (Positive Class)")
+        plt.savefig(f"evaluation_plots/partial_dependence/partial_dependence_{feature}_lgbm.png")
+        plt.close()
+    else:
+        print(f"Feature '{feature}' not found in the DataFrame.")
