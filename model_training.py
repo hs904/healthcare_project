@@ -302,10 +302,28 @@ explainer_lgbm = Explainer(final_model, X_test_preprocessed_df, y_test)
 # Generate Partial Dependence Plots and save them
 for feature in top_features_lgbm:
     if feature in X_test_preprocessed_df.columns:
-        pd_profile_lgbm = explainer_lgbm.model_profile(variables=[feature])
-        pd_profile_lgbm.plot(title=f"Partial Dependence Plot - {feature} (LGBM)")
+        # Calculate model profile (Partial Dependence) using Dalex
+        pd_profile_lgbm = explainer_lgbm.model_profile(variables=[feature])  # Removed 'variable_splits'
+
+        # Extract partial dependence data from the result
+        pd_data = pd_profile_lgbm.result
+        feature_values = pd_data[pd_data["_vname_"] == feature]["_x_"]
+        predictions = pd_data[pd_data["_vname_"] == feature]["_yhat_"]
+
+        # Plot the partial dependence using Matplotlib
+        plt.figure(figsize=(8, 6))
+        plt.plot(feature_values, predictions, marker="o", linestyle="--", color="blue", label=f"{feature}")
+        plt.xlabel(feature)
         plt.ylabel("Predicted Probability (Positive Class)")
-        plt.savefig(f"evaluation_plots/partial_dependence/partial_dependence_{feature}_lgbm.png")
+        plt.title(f"Partial Dependence Plot - {feature} (LGBM)")
+        plt.grid(alpha=0.3)
+        plt.legend(loc="best")
+        plt.tight_layout()
+
+        # Save the plot as a static image
+        save_path = f"evaluation_plots/partial_dependence/partial_dependence_{feature}_lgbm.png"
+        plt.savefig(save_path)
         plt.close()
+        print(f"Partial dependence plot saved: {save_path}")
     else:
         print(f"Feature '{feature}' not found in the DataFrame.")
