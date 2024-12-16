@@ -28,6 +28,13 @@ def remove_unrepresentative_rows(df, column, valid_values):
 
     return df
 
+def merge_work_types(df, column, values_to_merge, new_value):
+    """Merge specific values in a categorical column into a single new value."""
+    # Replace specified values with a new value in the column
+    df[column] = df[column].replace(values_to_merge, new_value)
+
+    return df
+
 def save_to_parquet(df, file_path):
     """Save the prepared dataset to a .parquet file."""
     df.to_parquet(file_path, index=False)

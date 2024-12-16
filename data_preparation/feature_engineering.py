@@ -7,8 +7,8 @@ import numpy as np
  # feature. But this should actually fall under feature engineering section.
 def create_binary_features(df):
     """Create new binary features."""
-    df['has_diabetes'] = np.where(df['avg_glucose_level'] >= 150, 1, 0)
+    df['has_diabetes'] = np.where(df['avg_glucose_level'] >= 126, 1, 0)
     return df
 
-  # Log transform (normalize) numeric features and encode categorical features are shown in 
-  # model_traning.py as processing pipeline
+  # Other feature engineering precess(e.g. scaling. encoding, feature interation
+  # are shown in the model_training.py file)

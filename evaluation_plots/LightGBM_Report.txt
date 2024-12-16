@@ -1,11 +1,11 @@
 LightGBM Classification Report:
               precision    recall  f1-score   support
 
-           0       0.95      0.97      0.96       912
-           1       0.18      0.09      0.12        54
+           0       0.95      0.96      0.96       912
+           1       0.15      0.11      0.13        54
 
-    accuracy                           0.93       966
-   macro avg       0.56      0.53      0.54       966
-weighted avg       0.90      0.93      0.91       966
+    accuracy                           0.92       966
+   macro avg       0.55      0.54      0.54       966
+weighted avg       0.90      0.92      0.91       966
 
-LightGBM ROC AUC Score: 0.6138117283950617
+LightGBM ROC AUC Score: 0.6166341780376868
