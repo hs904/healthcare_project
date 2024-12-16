@@ -1,11 +1,11 @@
 GLM Classification Report:
               precision    recall  f1-score   support
 
-           0       0.98      0.72      0.83       912
-           1       0.14      0.80      0.25        54
+           0       0.98      0.73      0.84       912
+           1       0.15      0.80      0.25        54
 
     accuracy                           0.73       966
-   macro avg       0.56      0.76      0.54       966
+   macro avg       0.57      0.76      0.54       966
 weighted avg       0.94      0.73      0.80       966
 
-GLM ROC AUC Score: 0.7588937621832359
+GLM ROC AUC Score: 0.7616349902534113
