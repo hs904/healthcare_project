@@ -12,12 +12,10 @@ from sklearn.calibration import calibration_curve
 from sklearn.metrics import classification_report, roc_auc_score, classification_report, roc_curve, RocCurveDisplay
 from imblearn.over_sampling import SMOTE
 import lightgbm as lgb
-from lightgbm import LGBMClassifier
 import optuna
 import os
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_auc_score, classification_report
-from sklearn.inspection import PartialDependenceDisplay
 from dalex import Explainer
 
 ### This file contains Modelling and Evaluation parts.
