@@ -1,14 +1,32 @@
 name: healthcare_project
+channels:
+  - conda-forge
+  - defaults
 dependencies:
   - python=3.12
   - pandas
   - numpy
+  # Machine Learning Libraries
   - scikit-learn
   - lightgbm
-  - seaborn
+  - optuna
+  - imbalanced-learn
+  # Visualisation Libraries
   - matplotlib
+  - seaborn
+  # Interpretability Library
+  - dalex
+  # Parquet Engine
   - pyarrow
-  - glum
+  # Jupyter Environment
+  - jupyter
+  - jupyterlab
+  - notebook
+  - pre-commit
+  - pytest
   - pip
   - pip:
-    - -e . 
+      - typing-extensions
+      - black
+      - flake8
+      - mypy
