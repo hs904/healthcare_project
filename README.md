@@ -11,6 +11,10 @@ conda activate healthcare_project
 ### **2. Install the repo as a package:**
 pip install -e .
 
+---
+### Dataset
+The raw dataset (`raw_data.csv`) is included in the repository under the `data/raw_data/` directory. No additional steps are required to obtain it.
+
 ### Run EDA_cleaning
 1. Launch Jupyter Notebook: jupyter notebook
 2. Navigate to the project directory and open eda_cleaning.ipynb.
