@@ -8,7 +8,7 @@ Prediction of stroke occurrences using healthcare data.
 conda env create -f environment.yml
 conda activate healthcare_project
 
-### **2. Install the repo as a package:
+### **2. Install the repo as a package:**
 pip install -e .
 
 ### Run EDA_cleaning
