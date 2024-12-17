@@ -15,7 +15,6 @@ import lightgbm as lgb
 import optuna
 import os
 import matplotlib.pyplot as plt
-from sklearn.metrics import roc_auc_score, classification_report
 from dalex import Explainer
 
 ### This file contains Modelling and Evaluation parts.
@@ -113,9 +112,19 @@ def lightgbm_objective(trial):
         'scale_pos_weight': trial.suggest_float('scale_pos_weight', 1.0, 10.0),
         'verbosity': -1
     }
-    train_data = lgb.Dataset(X_train_resampled, label=y_train_resampled)
-    valid_data = lgb.Dataset(X_test_preprocessed, label=y_test, reference=train_data)
 
+# Set up k-fold cross-validation
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    auc_scores = []
+    
+    for train_index, valid_index in kf.split(X_train_resampled, y_train_resampled):
+        X_train_fold, X_valid_fold = X_train_resampled[train_index], X_train_resampled[valid_index]
+        y_train_fold, y_valid_fold = y_train_resampled[train_index], y_train_resampled[valid_index]
+        
+        # Train LightGBM model on each fold
+        train_data = lgb.Dataset(X_train_fold, label=y_train_fold)
+        valid_data = lgb.Dataset(X_valid_fold, label=y_valid_fold, reference=train_data)
+   
 # Train LightGBM with parameters
     model = lgb.train(
         params,
@@ -126,10 +135,13 @@ def lightgbm_objective(trial):
         callbacks=[lgb.early_stopping(stopping_rounds=10), lgb.log_evaluation(10)]
     )
 
-    # Predict probabilities for AUC score
-    y_pred = model.predict(X_test_preprocessed, num_iteration=model.best_iteration)
-    auc = roc_auc_score(y_test, y_pred)
-    return auc
+# Predict probabilities for AUC score
+    y_pred = model.predict(X_valid_fold, num_iteration=model.best_iteration)
+    auc = roc_auc_score(y_valid_fold, y_pred)
+    auc_scores.append(auc)
+
+# Return the average AUC score across all folds
+    return np.mean(auc_scores)
 
 ### Step 4: Hyperparameter tuning ###
 
