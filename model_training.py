@@ -168,11 +168,14 @@ final_lightgbm_model = lgb.train(
     callbacks=[lgb.early_stopping(stopping_rounds=10), lgb.log_evaluation(10)]
 )
 
-# Get best parameters for both models
+# Get best predictions for both models
+# Predictions for GLM model
 best_glm_model = glm_grid_search.best_estimator_
+y_pred_glm_proba = best_glm_model.predict_proba(X_test_preprocessed)[:, 1]
 print("Best GLM Parameters:", glm_grid_search.best_params_)
-y_pred_glm = best_glm_model.predict(X_test_preprocessed)
+y_pred_glm = (y_pred_glm_proba > 0.5).astype(int)
 
+# Predictions for LightGBM model
 y_pred_lgbm = final_lightgbm_model.predict(X_test_preprocessed, num_iteration=final_lightgbm_model.best_iteration)
 y_pred_lgbm_binary = (y_pred_lgbm > 0.5).astype(int)
 
@@ -184,93 +187,133 @@ y_pred_lgbm_binary = (y_pred_lgbm > 0.5).astype(int)
 
 ### Step 1: ROC AUC Score and Classification Reperot ###
 
+def evaluate_model(y_true, y_pred, y_proba, model_name, save_path):
+    """
+    Generate classification report and calculate ROC AUC score.
+    Save results to a file.
+    """
+    report = classification_report(y_true, y_pred)
+    roc_auc = roc_auc_score(y_true, y_proba)
+    
+    print(f"==== {model_name} Evaluation ====")
+    print(report)
+    print(f"ROC AUC Score: {roc_auc:.4f}")
+    
+    with open(save_path, "w") as f:
+        f.write(f"{model_name} Classification Report:\n")
+        f.write(report)
+        f.write(f"\n{model_name} ROC AUC Score: {roc_auc:.4f}\n")
+
 # Evaluate GLM model
-print("Best GLM Parameters:", glm_grid_search.best_params_)
-y_pred_glm = best_glm_model.predict(X_test_preprocessed)
-glm_classification_report = classification_report(y_test, y_pred_glm)
-glm_roc_auc_score = roc_auc_score(y_test, y_pred_glm)
-print("GLM Classification Report:\n", glm_classification_report)
-print("GLM ROC AUC Score:", glm_roc_auc_score)
+evaluate_model(
+    y_test, y_pred_glm, y_pred_glm_proba,
+    "GLM", "evaluation_plots/GLM_Report.txt"
+)
 
-with open("evaluation_plots/GLM_Repoert.txt", "w") as f:
-    f.write("GLM Classification Report:\n")
-    f.write(glm_classification_report + "\n")
-    f.write(f"GLM ROC AUC Score: {glm_roc_auc_score}\n")
+# Evaluate LightGBM model
+evaluate_model(
+    y_test, y_pred_lgbm_binary, y_pred_lgbm,
+    "LightGBM", "evaluation_plots/LightGBM_Report.txt"
+)
 
-# Evaluate final LightGBM model
-y_pred_lgbm = final_lightgbm_model.predict(X_test_preprocessed, num_iteration=final_lightgbm_model.best_iteration)
-y_pred_lgbm_binary = (y_pred_lgbm > 0.5).astype(int)
-lgbm_classification_report = classification_report(y_test, y_pred_lgbm_binary)
-lgbm_roc_auc_score = roc_auc_score(y_test, y_pred_lgbm)
-print("LightGBM Classification Report:\n", lgbm_classification_report)
-print("LightGBM ROC AUC Score:", lgbm_roc_auc_score)
-
-with open("evaluation_plots/LightGBM_Report.txt", "w") as f:
-    f.write("LightGBM Classification Report:\n")
-    f.write(lgbm_classification_report + "\n")
-    f.write(f"LightGBM ROC AUC Score: {lgbm_roc_auc_score}\n")
 
 ### Step 2: ROC Curve Visualisation ###
 
 # Plot ROC Curve for GLM model
-roc_display_glm = RocCurveDisplay.from_estimator(
-    best_glm_model, X_test_preprocessed, y_test, name="GLM (Logistic Regression)"
-)
-plt.title("ROC Curve - GLM")
-plt.savefig("evaluation_plots/roc_curve_glm.png")
-plt.close()
+def plot_roc_curve(y_true, y_proba, model_name, save_path):
+    """
+    Plot ROC curve and save the plot.
+    """
+    fpr, tpr, _ = roc_curve(y_true, y_proba)
+    plt.figure()
+    plt.plot(fpr, tpr, label=f"{model_name} (AUC = {roc_auc_score(y_true, y_proba):.2f})")
+    plt.plot([0, 1], [0, 1], "k--", label="Random Classifier")
+    plt.title(f"ROC Curve - {model_name}")
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.legend(loc="best")
+    plt.grid(alpha=0.3)
+    plt.savefig(save_path)
+    plt.close()
+    print(f"ROC curve saved: {save_path}")
 
-# Plot ROC Curve for LightGBM model
-fpr, tpr, _ = roc_curve(y_test, y_pred_lgbm)
-plt.figure()
-plt.plot(fpr, tpr, label="LightGBM (AUC = {:.2f})".format(lgbm_roc_auc_score))
-plt.plot([0, 1], [0, 1], "k--", label="Random Classifier")
-plt.title("ROC Curve - LightGBM")
-plt.xlabel("False Positive Rate")
-plt.ylabel("True Positive Rate")
-plt.legend(loc="best")
-plt.savefig("evaluation_plots/roc_curve_lgbm.png")
-plt.close()
+# ROC Curve for GLM model
+plot_roc_curve(
+    y_test, y_pred_glm_proba, "GLM", "evaluation_plots/roc_curve_glm.png"
+)
+
+# ROC Curve for LightGBM model
+plot_roc_curve(
+    y_test, y_pred_lgbm, "LightGBM", "evaluation_plots/roc_curve_lgbm.png"
+)
+
 
 ### Step 3: "Predicted vs. Actual" plot ###
+
+def plot_predicted_vs_actual_scatter(y_true, y_proba, model_name, save_path):
+    """
+    Creates a scatter plot of predicted probabilities vs actual labels.
+    """
+    plt.figure(figsize=(8, 6))
+    plt.scatter(y_proba, y_true + np.random.uniform(-0.02, 0.02, size=len(y_true)),
+                alpha=0.6, color="blue", label="Predictions")
+    plt.axhline(y=0, color="red", linestyle="--", linewidth=0.8, label="Class 0 (Negative)")
+    plt.axhline(y=1, color="green", linestyle="--", linewidth=0.8, label="Class 1 (Positive)")
+    plt.xlabel("Predicted Probability")
+    plt.ylabel("Actual Binary Label (0 or 1)")
+    plt.title(f"Predicted vs. Actual Scatter Plot - {model_name}")
+    plt.legend(loc="best")
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Predicted vs. Actual scatter plot saved: {save_path}")
+
+# Scatter Plot for GLM model
+plot_predicted_vs_actual_scatter(
+    y_test, y_pred_glm_proba, "GLM", "evaluation_plots/predicted_vs_actual_glm.png"
+)
+
+# Scatter Plot for LightGBM model
+plot_predicted_vs_actual_scatter(
+    y_test, y_pred_lgbm, "LightGBM", "evaluation_plots/predicted_vs_actual_lgbm.png"
+)
  
+# Addition:
 # The Calibration Curve (Reliability Curve) is the most 
 # appropriate and widely used method to visualize the 
 # relationship between predicted probabilities and actual 
 # outcomes for binary classification tasks. 
 
-# Calibration curve for GLM model
-y_pred_glm_proba = best_glm_model.predict_proba(X_test_preprocessed)[:, 1]
-prob_true, prob_pred = calibration_curve(y_test, y_pred_glm_proba, n_bins=10)
+def plot_calibration_curve(y_true, y_proba, model_name, save_path):
+    """
+    Plot calibration curve and save the plot.
+    """
+    y_proba = np.clip(y_proba, 0, 1)
+    prob_true, prob_pred = calibration_curve(y_true, y_proba, n_bins=10)
+    plt.figure(figsize=(8, 6))
+    plt.plot(prob_pred, prob_true, marker="o", label=model_name, linestyle="--")
+    plt.plot([0, 1], [0, 1], "r--", label="Perfect Calibration")
+    plt.title(f"Calibration Curve - {model_name}")
+    plt.xlabel("Predicted Probability")
+    plt.ylabel("Actual Fraction of Positives")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Calibration curve saved: {save_path}")
 
-plt.figure(figsize=(8, 6))
-plt.plot(prob_pred, prob_true, marker="o", label="GLM", linestyle="--", color="blue")
-plt.plot([0, 1], [0, 1], "r--", label="Perfect Calibration", alpha=0.7)
-plt.title("Calibration Curve")
-plt.xlabel("Predicted Probability")
-plt.ylabel("Actual Fraction of Positives")
-plt.legend()
-plt.grid(alpha=0.3)
-plt.savefig("evaluation_plots/calibration_curve_glm.png")
-plt.show()
+# Calibration Curve for GLM model
+plot_calibration_curve(
+    y_test, y_pred_glm_proba, "GLM", "evaluation_plots/calibration_curve_glm.png"
+)
 
-# Calibration curve for LightGBM model
-y_pred_lgbm = final_lightgbm_model.predict(X_test_preprocessed, num_iteration=final_lightgbm_model.best_iteration)
-print("Min value in y_pred_lgbm:", y_pred_lgbm.min())
-print("Max value in y_pred_lgbm:", y_pred_lgbm.max())
-y_pred_lgbm = np.clip(y_pred_lgbm, 0, 1)
-prob_true_lgbm, prob_pred_lgbm = calibration_curve(y_test, y_pred_lgbm, n_bins=10)
+# Calibration Curve for LightGBM model
+plot_calibration_curve(
+    y_test, y_pred_lgbm, "LightGBM", "evaluation_plots/calibration_curve_lgbm.png"
+)
 
-plt.figure(figsize=(8, 6))
-plt.plot(prob_pred_lgbm, prob_true_lgbm, marker="o", label="LGBM", linestyle="--", color="green")
-plt.plot([0, 1], [0, 1], "r--", label="Perfect Calibration", alpha=0.7)
-plt.title("Calibration Curve - LGBM")
-plt.xlabel("Predicted Probability")
-plt.ylabel("Actual Fraction of Positives")
-plt.legend()
-plt.grid(alpha=0.3)
-plt.savefig("evaluation_plots/calibration_curve_lgbm.png")
-plt.show()
 
 ### Step 4: Feature Importance ###
 
