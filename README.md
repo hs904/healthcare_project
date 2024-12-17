@@ -16,13 +16,7 @@ pip install -e .
 The raw dataset (`raw_data.csv`) is included in the repository under the `data/raw_data/` directory. No additional steps are required to obtain it.
 
 ### Run EDA_cleaning
-1. Launch Jupyter Notebook: jupyter notebook
-2. Navigate to the project directory and open eda_cleaning.ipynb.
-3. Run the cells in the notebook sequentially to:
-   Explore the raw dataset from data/raw_data/.
-   Visualize distributions, correlations, and outliers.
-   Perform cleaning steps like handling missing values and removing outliers.
-   Save the cleaned dataset as prepared_data.parquet in the data/ directory.
+jupyter notebook eda_cleaning.ipynb
 
 ### Run Model Training 
 python model_training.py
