@@ -9,7 +9,7 @@ conda env create -f environment.yml
 conda activate healthcare_project
 
 ### **2. Install the repo as a package:**
-pip install -e .
+pip install -e.
 
 ---
 ### Dataset
