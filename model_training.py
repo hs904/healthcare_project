@@ -189,6 +189,7 @@ y_pred_glm = (y_pred_glm_proba > 0.5).astype(int)
 
 # Predictions for LightGBM model
 y_pred_lgbm = final_lightgbm_model.predict(X_test_preprocessed, num_iteration=final_lightgbm_model.best_iteration)
+print("Best LightGBM Parameters:", best_lightgbm_params)
 y_pred_lgbm_binary = (y_pred_lgbm > 0.5).astype(int)
 
 
